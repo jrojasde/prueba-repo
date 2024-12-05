@@ -1,0 +1,55 @@
+name: Deploy Spring Boot to EKS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Checkout del repositorio
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    # Configuración de Java y Maven para construir la aplicación
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: 17
+
+    - name: Build with Maven
+      run: mvn clean package -DskipTests
+
+    # Log in en Amazon ECR
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    # Construcción y publicación de la imagen Docker
+    - name: Build and Push Docker image
+      run: |
+        IMAGE_TAG=latest
+        REPOSITORY_URI=<your-ecr-repository-uri>
+        docker build -t $REPOSITORY_URI:$IMAGE_TAG .
+        docker push $REPOSITORY_URI:$IMAGE_TAG
+
+    # Configurar kubectl para EKS
+    - name: Configure kubectl for EKS
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: <your-region>
+
+    - name: Update kubeconfig
+      run: |
+        aws eks update-kubeconfig --region <your-region> --name <your-cluster-name>
+
+    # Despliegue en EKS
+    - name: Deploy to EKS
+      run: |
+        kubectl apply -f k8s/deployment.yaml
+        kubectl rollout status deployment/<your-deployment-name>
